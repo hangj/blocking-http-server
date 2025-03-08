@@ -11,11 +11,6 @@ fn main() -> anyhow::Result<()> {
     }
     let mut server = Server::bind(&args[1])?;
 
-    {
-        let req = server.recv()?;
-        println!("recv: {} {} {}", req.peer_addr, req.method(), req.uri().path());
-    }
-
     for req in server.incoming() {
         let mut req = match req {
             Ok(req) => req,
@@ -29,13 +24,18 @@ fn main() -> anyhow::Result<()> {
 
         match (req.method(), req.uri().path()) {
             (&Method::GET, "/") => {
-                let _ = req.response(Response::new("index".as_bytes()));
+                let _ = req.response(&Response::new("index".as_bytes()));
             }
             (&Method::GET, "/hello") => {
-                let _ = req.response(Response::new("hello world".as_bytes()));
+                let _ = req.response(&Response::new("hello world".as_bytes()));
             }
             _ => {
-                let _ = req.response(Response::new("404 not found".as_bytes()));
+                let _ = req.response(
+                    &Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .body("404 Not Found".as_bytes())
+                        .unwrap(),
+                );
             }
         }
     }

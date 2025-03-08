@@ -62,7 +62,12 @@ pub struct HttpRequest {
 impl Drop for HttpRequest {
     fn drop(&mut self) {
         if !self.responsed {
-            let _ = self.response(Response::new("404 not found".as_bytes()));
+            let _ = self.response(
+                &Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body("404 Not Found".as_bytes())
+                    .unwrap(),
+            );
         }
     }
 }
@@ -110,38 +115,40 @@ impl HttpRequest {
 
     pub fn response<T: std::borrow::Borrow<[u8]>>(
         &mut self,
-        response: Response<T>,
+        response: &Response<T>,
     ) -> io::Result<()> {
         self.responsed = true;
 
         let version = self.version();
         let stream = self.deref_mut().body_mut();
 
-        let (parts, body) = response.into_parts();
-        let body: &[u8] = body.borrow();
+        // let version = response.version();
+        let status = response.status();
+        let headers = response.headers();
+        let body: &[u8] = response.body().borrow();
 
         let mut text = format!(
             "{:?} {} {}\r\n",
             version,
-            parts.status.as_str(),
-            parts.status.canonical_reason().unwrap_or("Unknown"),
+            status.as_str(),
+            status.canonical_reason().unwrap_or("Unknown"),
         );
 
         // println!("write_response: {}", text);
 
-        // if !parts.headers.contains_key(header::DATE) {
+        // if !headers.contains_key(header::DATE) {
         //     let date = time::strftime("%a, %d %b %Y %H:%M:%S GMT", &time::now_utc()).unwrap();
         //     write!(text, "date: {}\r\n", date).unwrap();
         // }
-        if !parts.headers.contains_key(header::CONNECTION) {
+        if !headers.contains_key(header::CONNECTION) {
             write!(text, "connection: close\r\n")
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
-        if !parts.headers.contains_key(header::CONTENT_LENGTH) {
+        if !headers.contains_key(header::CONTENT_LENGTH) {
             write!(text, "content-length: {}\r\n", body.len())
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
-        for (k, v) in parts.headers.iter() {
+        for (k, v) in headers.iter() {
             write!(
                 text,
                 "{}: {}\r\n",
