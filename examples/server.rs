@@ -11,6 +11,11 @@ fn main() -> anyhow::Result<()> {
     }
     let mut server = Server::bind(&args[1])?;
 
+    {
+        let req = server.recv()?;
+        println!("recv: {} {} {}", req.peer_addr, req.method(), req.uri().path());
+    }
+
     for req in server.incoming() {
         let mut req = match req {
             Ok(req) => req,

@@ -8,7 +8,7 @@ No async, No runtime, just a dead simple blocking http server
 use blocking_http_server::*;
 
 fn main() -> anyhow::Result<()> {
-    let mut server = Server::bind("127.0.0.1:8000").unwrap();
+    let mut server = Server::bind("127.0.0.1:8000")?;
 
     for req in server.incoming() {
         let mut req = match req {

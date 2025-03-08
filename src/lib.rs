@@ -35,6 +35,7 @@ impl Server {
     }
 
     pub fn set_request_size_limit(&mut self, limit: usize) {
+        self.buf = BytesMut::with_capacity(limit);
         self.req_size_limit = limit;
     }
 
@@ -54,6 +55,16 @@ pub struct HttpRequest {
     header_buf: BytesMut,
     body_buf: BytesMut,
     request: Request<TcpStream>,
+
+    responsed: bool,
+}
+
+impl Drop for HttpRequest {
+    fn drop(&mut self) {
+        if !self.responsed {
+            let _ = self.response(Response::new("404 not found".as_bytes()));
+        }
+    }
 }
 
 impl HttpRequest {
@@ -101,6 +112,8 @@ impl HttpRequest {
         &mut self,
         response: Response<T>,
     ) -> io::Result<()> {
+        self.responsed = true;
+
         let version = self.version();
         let stream = self.deref_mut().body_mut();
 
@@ -253,6 +266,7 @@ impl Iterator for Incoming<'_> {
                         header_buf,
                         body_buf,
                         request,
+                        responsed: false,
                     }));
                 }
                 Err(e) => {
