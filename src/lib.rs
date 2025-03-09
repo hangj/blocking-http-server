@@ -55,21 +55,6 @@ pub struct HttpRequest {
     header_buf: BytesMut,
     body_buf: BytesMut,
     request: Request<TcpStream>,
-
-    responsed: bool,
-}
-
-impl Drop for HttpRequest {
-    fn drop(&mut self) {
-        if !self.responsed {
-            let _ = self.response(
-                &Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body("404 Not Found".as_bytes())
-                    .unwrap(),
-            );
-        }
-    }
 }
 
 impl HttpRequest {
@@ -117,8 +102,6 @@ impl HttpRequest {
         &mut self,
         response: &Response<T>,
     ) -> io::Result<()> {
-        self.responsed = true;
-
         let version = self.version();
         let stream = self.deref_mut().body_mut();
 
@@ -273,7 +256,6 @@ impl Iterator for Incoming<'_> {
                         header_buf,
                         body_buf,
                         request,
-                        responsed: false,
                     }));
                 }
                 Err(e) => {
