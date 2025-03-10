@@ -98,11 +98,11 @@ impl HttpRequest {
     }
 
     pub fn respond<T: std::borrow::Borrow<[u8]>>(
-        &mut self,
+        &self,
         response: impl std::borrow::Borrow<Response<T>>,
     ) -> io::Result<()> {
         let version = self.version();
-        let stream = self.deref_mut().body_mut();
+        let mut stream = self.deref().body().try_clone()?;
 
         let response: &Response<T> = response.borrow();
         // let version = response.version();
