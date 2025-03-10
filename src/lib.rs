@@ -215,6 +215,9 @@ impl Iterator for Incoming<'_> {
                     }
 
                     let mut body_buf = header_buf.split_off(offset);
+                    if body_buf.capacity() < content_len {
+                        return Some(Err(io::Error::new(io::ErrorKind::Other, "body too large")));
+                    }
 
                     if body_buf.len() >= content_len {
                         body_buf.truncate(content_len);
@@ -222,9 +225,6 @@ impl Iterator for Incoming<'_> {
                         let size = content_len - body_buf.len();
     
                         let mut tmp = body_buf.split_off(body_buf.len());
-                        if tmp.capacity() < content_len {
-                            return Some(Err(io::Error::new(io::ErrorKind::Other, "body too large")));
-                        }
                         unsafe { tmp.set_len(size) };
     
                         if let Err(e) = stream.read_exact(&mut tmp) {
