@@ -12,7 +12,7 @@ fn main() -> anyhow::Result<()> {
     let mut server = Server::bind(&args[1])?;
 
     for req in server.incoming() {
-        let mut req = match req {
+        let req = match req {
             Ok(req) => req,
             Err(e) => {
                 eprintln!("Error: {}", e);
@@ -28,6 +28,18 @@ fn main() -> anyhow::Result<()> {
             }
             (&Method::GET, "/hello") => {
                 let _ = req.respond(Response::new("hello world".as_bytes()));
+            }
+            (&Method::GET, "/json") => {
+                let _ = req.respond(
+                    Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(r#"{"key":"value"}"#.as_bytes())
+                        .unwrap()
+                    );
+            }
+            (&Method::POST, "/json") => {
+                let body = req.body();
+                let _ = req.respond(Response::new(body));
             }
             _ => {
                 let _ = req.respond(

@@ -52,63 +52,27 @@ pub struct HttpRequest {
     pub peer_addr: SocketAddr,
 
     header_buf: BytesMut,
-    body_buf: BytesMut,
-    request: Request<TcpStream>,
+    request: Request<BytesMut>,
+    stream: TcpStream,
 }
 
 impl HttpRequest {
     pub fn header_bytes(&self) -> &[u8] {
         &self.header_buf
     }
-    pub fn body(&mut self) -> io::Result<&[u8]> {
-        let content_len = self
-            .headers()
-            .get(header::CONTENT_LENGTH)
-            .and_then(|len| len.to_str().ok())
-            .and_then(|s| s.parse::<usize>().ok());
 
-        match content_len {
-            Some(len) => {
-                if self.body_buf.len() >= len {
-                    self.body_buf.truncate(len);
-                } else {
-                    let size = len - self.body_buf.len();
-
-                    let mut tmp = self.body_buf.split_off(self.body_buf.len());
-                    if tmp.capacity() < size {
-                        return Err(io::Error::new(io::ErrorKind::Other, "body too large"));
-                    }
-                    unsafe { tmp.set_len(size) };
-
-                    let stream = self.deref_mut().body_mut();
-
-                    stream.read_exact(&mut tmp)?;
-                    self.body_buf.unsplit(tmp);
-                }
-            }
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "missing content-length",
-                ))
-            }
-        }
-
-        Ok(&self.body_buf)
-    }
-
-    pub fn respond<T: std::borrow::Borrow<[u8]>>(
+    pub fn respond<T: AsRef<[u8]>>(
         &self,
         response: impl std::borrow::Borrow<Response<T>>,
     ) -> io::Result<()> {
         let version = self.version();
-        let mut stream = self.deref().body().try_clone()?;
+        let mut stream = &self.stream;
 
         let response: &Response<T> = response.borrow();
         // let version = response.version();
         let status = response.status();
         let headers = response.headers();
-        let body: &[u8] = response.body().borrow();
+        let body = response.body().as_ref();
 
         write!(
             stream,
@@ -148,14 +112,14 @@ impl HttpRequest {
 }
 
 impl Deref for HttpRequest {
-    type Target = Request<TcpStream>;
-    fn deref(&self) -> &Request<TcpStream> {
+    type Target = Request<BytesMut>;
+    fn deref(&self) -> &Self::Target {
         &self.request
     }
 }
 
 impl DerefMut for HttpRequest {
-    fn deref_mut(&mut self) -> &mut Request<TcpStream> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.request
     }
 }
@@ -231,28 +195,56 @@ impl Iterator for Incoming<'_> {
                         .method(req.method.unwrap_or("GET"))
                         .version(version);
 
+                    let mut content_len = 0;
                     for header in req.headers {
                         builder = builder.header(header.name, header.value);
                         if header.name.eq_ignore_ascii_case("host") {
                             let host = header.value;
                             uri = uri.authority(host);
                         }
+
+                        if header.name.eq_ignore_ascii_case(header::CONTENT_LENGTH.as_str()) {
+                            content_len = std::str::from_utf8(header.value).unwrap_or("0").parse::<usize>().unwrap_or(0);
+                            if content_len > header_buf.capacity() - offset {
+                                return Some(Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    "body too large",
+                                )));
+                            }
+                        }
+                    }
+
+                    let mut body_buf = header_buf.split_off(offset);
+
+                    if body_buf.len() >= content_len {
+                        body_buf.truncate(content_len);
+                    } else {
+                        let size = content_len - body_buf.len();
+    
+                        let mut tmp = body_buf.split_off(body_buf.len());
+                        if tmp.capacity() < content_len {
+                            return Some(Err(io::Error::new(io::ErrorKind::Other, "body too large")));
+                        }
+                        unsafe { tmp.set_len(size) };
+    
+                        if let Err(e) = stream.read_exact(&mut tmp) {
+                            return Some(Err(e));
+                        }
+                        body_buf.unsplit(tmp);
                     }
 
                     builder = builder.uri(uri.build().unwrap_or_default());
 
-                    let request = match builder.body(stream) {
+                    let request = match builder.body(body_buf) {
                         Ok(req) => req,
                         Err(e) => return Some(Err(io::Error::new(io::ErrorKind::Other, e))),
                     };
 
-                    let body_buf = header_buf.split_off(offset);
-
                     return Some(Ok(HttpRequest {
                         peer_addr: addr,
                         header_buf,
-                        body_buf,
                         request,
+                        stream,
                     }));
                 }
                 Err(e) => {
@@ -270,3 +262,5 @@ impl Iterator for Incoming<'_> {
         }
     }
 }
+
+
