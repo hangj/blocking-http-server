@@ -6,8 +6,7 @@ use std::ops::DerefMut;
 use bytes::BytesMut;
 pub use http::*;
 use io::Read;
-use io::Write as _;
-use std::fmt::Write as _;
+use io::Write;
 use std::io;
 use std::net::SocketAddr;
 use std::net::TcpListener;
@@ -98,50 +97,48 @@ impl HttpRequest {
         Ok(&self.body_buf)
     }
 
-    pub fn response<T: std::borrow::Borrow<[u8]>>(
+    pub fn respond<T: std::borrow::Borrow<[u8]>>(
         &mut self,
-        response: &Response<T>,
+        response: impl std::borrow::Borrow<Response<T>>,
     ) -> io::Result<()> {
         let version = self.version();
         let stream = self.deref_mut().body_mut();
 
+        let response: &Response<T> = response.borrow();
         // let version = response.version();
         let status = response.status();
         let headers = response.headers();
         let body: &[u8] = response.body().borrow();
 
-        let mut text = format!(
+        write!(
+            stream,
             "{:?} {} {}\r\n",
             version,
             status.as_str(),
             status.canonical_reason().unwrap_or("Unknown"),
-        );
+        )?;
 
         // println!("write_response: {}", text);
 
         // if !headers.contains_key(header::DATE) {
         //     let date = time::strftime("%a, %d %b %Y %H:%M:%S GMT", &time::now_utc()).unwrap();
-        //     write!(text, "date: {}\r\n", date).unwrap();
+        //     write!(stream, "date: {}\r\n", date)?;
         // }
         if !headers.contains_key(header::CONNECTION) {
-            write!(text, "connection: close\r\n")
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            write!(stream, "connection: close\r\n")?;
         }
         if !headers.contains_key(header::CONTENT_LENGTH) {
-            write!(text, "content-length: {}\r\n", body.len())
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            write!(stream, "content-length: {}\r\n", body.len())?;
         }
         for (k, v) in headers.iter() {
             write!(
-                text,
+                stream,
                 "{}: {}\r\n",
                 k.as_str(),
                 v.to_str().unwrap_or("unknown")
-            )
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            )?;
         }
 
-        stream.write_all(text.as_bytes())?;
         stream.write_all(b"\r\n")?;
         stream.write_all(body)?;
         stream.flush()?;
@@ -183,7 +180,7 @@ impl Iterator for Incoming<'_> {
             let buf = &mut self.server.buf;
             buf.clear();
             if self.server.req_size_limit > buf.capacity() {
-                // This will not cause reallocation, because the `split_off`ed body_buf is dropped at this point.
+                // This will not cause reallocation, because the `split_off`ed header_buf and body_buf are dropped at this point.
                 buf.reserve(self.server.req_size_limit - buf.capacity());
             }
         }

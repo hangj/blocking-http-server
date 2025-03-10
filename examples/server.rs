@@ -24,14 +24,14 @@ fn main() -> anyhow::Result<()> {
 
         match (req.method(), req.uri().path()) {
             (&Method::GET, "/") => {
-                let _ = req.response(&Response::new("index".as_bytes()));
+                let _ = req.respond(Response::new("index".as_bytes()));
             }
             (&Method::GET, "/hello") => {
-                let _ = req.response(&Response::new("hello world".as_bytes()));
+                let _ = req.respond(Response::new("hello world".as_bytes()));
             }
             _ => {
-                let _ = req.response(
-                    &Response::builder()
+                let _ = req.respond(
+                    Response::builder()
                         .status(StatusCode::NOT_FOUND)
                         .body("404 Not Found".as_bytes())
                         .unwrap(),
