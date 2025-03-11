@@ -24,16 +24,16 @@ fn main() -> anyhow::Result<()> {
 
         match (req.method(), req.uri().path()) {
             (&Method::GET, "/") => {
-                let _ = req.respond(Response::new("index".as_bytes()));
+                let _ = req.respond(Response::new("index"));
             }
             (&Method::GET, "/hello") => {
-                let _ = req.respond(Response::new("hello world".as_bytes()));
+                let _ = req.respond(Response::new("hello world"));
             }
             (&Method::GET, "/json") => {
                 let _ = req.respond(
                     Response::builder()
                         .header("Content-Type", "application/json")
-                        .body(r#"{"key":"value"}"#.as_bytes())
+                        .body(r#"{"key":"value"}"#)
                         .unwrap()
                     );
             }
@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
                 let _ = req.respond(
                     Response::builder()
                         .status(StatusCode::NOT_FOUND)
-                        .body("404 Not Found".as_bytes())
+                        .body("404 Not Found")
                         .unwrap(),
                 );
             }

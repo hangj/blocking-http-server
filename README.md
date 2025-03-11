@@ -21,13 +21,13 @@ fn main() -> anyhow::Result<()> {
 
         match (req.method(), req.uri().path()) {
             (&Method::GET, "/") => {
-                let _ = req.respond(Response::new("hello world".as_bytes()));
+                let _ = req.respond(Response::new("hello world"));
             }
             _ => {
                 let _ = req.respond(
                     Response::builder()
                         .status(StatusCode::NOT_FOUND)
-                        .body("404 Not Found".as_bytes())
+                        .body("404 Not Found")
                         .unwrap(),
                 );
              }
