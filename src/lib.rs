@@ -159,10 +159,7 @@ impl Iterator for Incoming<'_> {
                 Ok(0) => {
                     tmp.clear();
                     header_buf.unsplit(tmp);
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "uncomplete request header",
-                    )));
+                    return Some(Err(io::Error::other("uncomplete request header")));
                 }
                 Ok(n) => {
                     unsafe { tmp.set_len(n) };
@@ -176,7 +173,7 @@ impl Iterator for Incoming<'_> {
                         Ok(httparse::Status::Partial) => continue,
                         Err(e) => {
                             // eprintln!("error: {e}");
-                            return Some(Err(io::Error::new(io::ErrorKind::Other, e)));
+                            return Some(Err(io::Error::other(e)));
                         }
                     };
 
@@ -206,17 +203,14 @@ impl Iterator for Incoming<'_> {
                         if header.name.eq_ignore_ascii_case(header::CONTENT_LENGTH.as_str()) {
                             content_len = std::str::from_utf8(header.value).unwrap_or("0").parse::<usize>().unwrap_or(0);
                             if content_len > header_buf.capacity() - offset {
-                                return Some(Err(io::Error::new(
-                                    io::ErrorKind::Other,
-                                    "body too large",
-                                )));
+                                return Some(Err(io::Error::other("body too large")));
                             }
                         }
                     }
 
                     let mut body_buf = header_buf.split_off(offset);
                     if body_buf.capacity() < content_len {
-                        return Some(Err(io::Error::new(io::ErrorKind::Other, "body too large")));
+                        return Some(Err(io::Error::other("body too large")));
                     }
 
                     if body_buf.len() >= content_len {
@@ -237,7 +231,7 @@ impl Iterator for Incoming<'_> {
 
                     let request = match builder.body(body_buf) {
                         Ok(req) => req,
-                        Err(e) => return Some(Err(io::Error::new(io::ErrorKind::Other, e))),
+                        Err(e) => return Some(Err(io::Error::other(e))),
                     };
 
                     return Some(Ok(HttpRequest {
