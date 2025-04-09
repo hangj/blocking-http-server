@@ -61,6 +61,10 @@ impl HttpRequest {
         &self.header_buf
     }
 
+    pub unsafe fn stream(&self) -> &TcpStream {
+        &self.stream
+    }
+
     pub fn respond<T: AsRef<[u8]>>(
         &self,
         response: impl std::borrow::Borrow<Response<T>>,
@@ -184,21 +188,22 @@ impl Iterator for Incoming<'_> {
                         None => Version::HTTP_11,
                     };
 
-                    let mut uri = Uri::builder()
-                        .scheme(uri::Scheme::HTTP)
-                        .path_and_query(req.path.unwrap_or("/"));
+                    let uri: Uri = match req.path.unwrap_or("/").parse() {
+                        Ok(uri) => uri,
+                        Err(e) => {
+                            // eprintln!("error: {e}");
+                            return Some(Err(io::Error::other(e)));
+                        }
+                    };
 
                     let mut builder = Request::builder()
                         .method(req.method.unwrap_or("GET"))
+                        .uri(uri)
                         .version(version);
 
                     let mut content_len = 0;
                     for header in req.headers {
                         builder = builder.header(header.name, header.value);
-                        if header.name.eq_ignore_ascii_case("host") {
-                            let host = header.value;
-                            uri = uri.authority(host);
-                        }
 
                         if header.name.eq_ignore_ascii_case(header::CONTENT_LENGTH.as_str()) {
                             content_len = std::str::from_utf8(header.value).unwrap_or("0").parse::<usize>().unwrap_or(0);
@@ -226,8 +231,6 @@ impl Iterator for Incoming<'_> {
                         }
                         body_buf.unsplit(tmp);
                     }
-
-                    builder = builder.uri(uri.build().unwrap_or_default());
 
                     let request = match builder.body(body_buf) {
                         Ok(req) => req,
